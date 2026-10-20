@@ -12,7 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import array
 from collections import OrderedDict
+
+import numpy
+import pytest
+import rosidl_parser.definition
 
 from rosidl_runtime_py import message_to_csv
 from rosidl_runtime_py import message_to_ordereddict
@@ -20,6 +25,53 @@ from rosidl_runtime_py import message_to_yaml
 from rosidl_runtime_py.convert import _convert_value
 
 from test_msgs import message_fixtures
+from test_msgs.msg import Arrays
+import yaml
+
+
+@pytest.mark.parametrize('value', [
+    array.array('B', [0, 42, 255]),
+    array.array('i', [-1, 0, 42]),
+    array.array('f', [-1.5, 0.0, 42.5]),
+    numpy.array([-1.5, 0.0, 42.5], dtype=numpy.float32),
+    numpy.array([-1.5, 0.0, 42.5], dtype=numpy.float64),
+    numpy.array([0, 42, 255], dtype=numpy.uint8),
+    array.array('B'),
+    numpy.array([], dtype=numpy.float32),
+])
+def test_convert_numeric_arrays(value):
+    expected = value.tolist()
+    result = _convert_value(value)
+    assert result == expected
+    assert all(type(actual) is type(wanted) for actual, wanted in zip(result, expected))
+    assert _convert_value({'nested': [value]}) == {'nested': [expected]}
+    for limit in (0, 2, 10):
+        truncated = expected[:limit] + ['...'] if len(expected) > limit else expected
+        assert _convert_value(value, truncate_length=limit) == truncated
+    field_type = rosidl_parser.definition.UnboundedSequence(
+        rosidl_parser.definition.BasicType('uint8'))
+    assert _convert_value(value, field_type=field_type, no_arr=True) == (
+        '<sequence type: uint8, length: {}>'.format(len(value)))
+    assert value.tolist() == expected
+    assert _convert_value(value, no_str=True) == expected
+
+
+def test_convert_non_numeric_arrays():
+    values = [array.array('u', 'abc'), numpy.array(['a', 'b', 'c'])]
+    for value in values:
+        assert _convert_value(value) == ['a', 'b', 'c']
+        assert _convert_value(value, no_str=True) == ['<string length: <1>>'] * 3
+    assert _convert_value(numpy.array(['abc', 42], dtype=object), no_str=True) == [
+        '<string length: <3>>', 42]
+
+
+def test_array_message_formatters():
+    msg = Arrays(float32_values=numpy.array([-1.5, 0.0, 42.5], dtype=numpy.float32))
+    expected = [-1.5, 0.0, 42.5]
+    result = message_to_ordereddict(msg)
+    assert result['float32_values'] == expected
+    assert all(type(value) is float for value in result['float32_values'])
+    assert yaml.safe_load(message_to_yaml(msg))['float32_values'] == expected
 
 
 def test_primitives():

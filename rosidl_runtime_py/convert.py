@@ -225,6 +225,11 @@ def _convert_value(
             value = typename(
                 [_convert_value(v, truncate_length=truncate_length,
                                 no_arr=no_arr, no_str=no_str) for v in value] + ['...'])
+        elif (
+            isinstance(value, array.array) and value.typecode != 'u'
+            or isinstance(value, numpy.ndarray) and value.dtype.kind in 'iuf'
+        ):
+            value = value.tolist()
         else:
             # Truncate every item in the list
             value = typename(
