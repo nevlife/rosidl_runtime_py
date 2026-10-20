@@ -24,6 +24,15 @@ import yaml
 
 __yaml_representer_registered = False
 
+_BYTE_REPRS = [str(bytes((i,))) for i in range(256)]
+
+
+def _is_octet_sequence(field_type):
+    return (
+        isinstance(field_type, rosidl_parser.definition.AbstractSequence) and
+        isinstance(field_type.value_type, rosidl_parser.definition.BasicType) and
+        field_type.value_type.typename == 'octet')
+
 
 def __get_type_name(value_type):
     if isinstance(value_type, rosidl_parser.definition.BasicType):
@@ -118,7 +127,14 @@ def message_to_csv(
     def to_string(val, field_type=None):
         nonlocal truncate_length, no_arr, no_str
         r = ''
-        if any(isinstance(val, t) for t in [list, tuple, array.array, numpy.ndarray]):
+        if isinstance(val, bytes) and _is_octet_sequence(field_type):
+            if no_arr is True:
+                r = __abbreviate_array_info(val, field_type)
+            elif truncate_length is not None and len(val) > truncate_length:
+                r = ','.join([_BYTE_REPRS[c] for c in val[:truncate_length]] + ['...'])
+            else:
+                r = ','.join([_BYTE_REPRS[c] for c in val])
+        elif any(isinstance(val, t) for t in [list, tuple, array.array, numpy.ndarray]):
             if no_arr is True and field_type is not None:
                 r = __abbreviate_array_info(val, field_type)
             else:
@@ -203,11 +219,19 @@ def _convert_value(
     no_str=False
 ):
 
-    if isinstance(value, bytes):
-        if truncate_length is not None and len(value) > truncate_length:
-            value = ''.join([chr(c) for c in value[:truncate_length]]) + '...'
+    if isinstance(value, bytes) and _is_octet_sequence(field_type):
+        # byte[] fields hold bytes; output them like the list of one-byte bytes Jazzy stores.
+        if no_arr is True:
+            value = __abbreviate_array_info(value, field_type)
+        elif truncate_length is not None and len(value) > truncate_length:
+            value = list(value[:truncate_length].decode('latin-1')) + ['...']
         else:
-            value = ''.join([chr(c) for c in value])
+            value = list(value.decode('latin-1'))
+    elif isinstance(value, bytes):
+        if truncate_length is not None and len(value) > truncate_length:
+            value = value[:truncate_length].decode('latin-1') + '...'
+        else:
+            value = value.decode('latin-1')
     elif isinstance(value, str):
         if no_str is True:
             value = '<string length: <{0}>>'.format(len(value))

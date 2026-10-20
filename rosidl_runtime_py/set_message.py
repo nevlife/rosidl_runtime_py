@@ -70,6 +70,12 @@ def set_message_fields(
                 value = numpy.array(field_value, dtype=field.dtype)
             elif type(field_value) is field_type:
                 value = field_value
+            elif field_type is bytes and isinstance(field_value, (list, tuple)):
+                # byte[] fields hold bytes; accept the lists that message_to_ordereddict emits.
+                value = b''.join(
+                    v.encode('latin-1') if isinstance(v, str) else
+                    bytes((v,)) if isinstance(v, int) else v
+                    for v in field_value)
             # We can't import these types directly, so we use the qualified class name to
             # distinguish them from other fields
             elif qualified_class_name == 'std_msgs.msg._header.Header' and \

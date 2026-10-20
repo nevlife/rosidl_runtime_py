@@ -18,7 +18,9 @@ import copy
 from builtin_interfaces.msg import Time
 import pytest
 import rosidl_parser.definition
+from rosidl_runtime_py import message_to_ordereddict
 from rosidl_runtime_py import set_message_fields
+from std_msgs.msg import ByteMultiArray
 from std_msgs.msg import Header
 from test_msgs import message_fixtures
 
@@ -153,6 +155,17 @@ def test_set_message_fields_full():
     set_message_fields(msg0, values)
 
     assert msg0 == msg1
+
+
+def test_set_message_fields_byte_sequence():
+    msg = ByteMultiArray(data=[b'\x01', b'A', b'\xff'])
+    round_trip = ByteMultiArray()
+    set_message_fields(round_trip, message_to_ordereddict(msg))
+    assert round_trip == msg
+    for value in ([1, 65, 255], [b'\x01', b'A', b'\xff']):
+        round_trip = ByteMultiArray()
+        set_message_fields(round_trip, {'data': value})
+        assert round_trip == msg
 
 
 def test_set_message_fields_invalid():
